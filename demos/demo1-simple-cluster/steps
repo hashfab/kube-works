@@ -1,0 +1,51 @@
+Install docker for Mac
+https://docs.docker.com/docker-for-mac/install/
+
+install gcloud sdk
+https://cloud.google.com/kubernetes-engine/docs/quickstart
+$ gcloud init
+
+Install kubectl
+$ gcloud components install kubectl
+
+Demo code
+cd demo1-simple-cluster
+
+
+Build and push docker image to registry.
+$ docker build -t kubia .
+$ docker images
+$ docker tag kubia dgunjetti/kubia
+$ docker images | head
+$ docker push dgunjetti/kubia
+
+Create gcloud cluster
+$ gcloud container clusters create kubia --num-nodes 1 --machine-type f1-micro --zone asia-south1
+$ kubectl cluster-info
+$ kubectl get nodes
+$ kubectl describe gke-kubia-default-pool-2f50283f-m4p5
+
+Push image into cluster
+$ kubectl run kubia --image=dgunjetti/kubia --port=8080 --generator=run/v1
+$ kubectl get pods
+
+Create service 
+$ kubectl expose rc kubia --type=LoadBalancer --name kubia-http
+$ kubectl get services
+
+Test
+$ curl 104.155.74.57:8080 
+
+Scale up cluster
+$ kubectl get replicationcontrollers
+$ kubectl scale rc kubia --replicas=3
+$ kubectl get rc
+$ kubectl get pods
+
+Test
+$ while true; do curl http://130.211.109.222:8080; done
+
+Cleanup
+$ kubectl delete all --all
+$ gcloud container clusters delete kubia --region asia-south1
+$ docker rmi dgunjetti/kubia. Kubia node:7

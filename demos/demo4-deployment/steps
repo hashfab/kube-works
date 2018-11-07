@@ -1,0 +1,27 @@
+$ cd v1
+$ docker build -t dgunjetti/kubia:v1 .
+$ docker push dgunjetti/kubia:v1
+
+$ kubectl create -f kubia-deployment-v1.yaml --record
+
+$ kubectl rollout status deployment kubia
+
+$ kubectl get po
+
+$ kubectl get replicasets
+
+$ kubectl patch deployment kubia -p '{"spec": {"minReadySeconds": 10}}'
+
+$ kubectl create -f kubia-svc.yaml
+
+$ curl http://35.244.0.244
+
+$ while true; do curl http://35.244.0.244; done 
+
+$ cd v2
+$ docker build -t dgunjetti/kubia:v2 .
+$ docker push dgunjetti/kubia:v2
+
+$ kubectl set image deployment kubia nodejs=dgunjetti/kubia:v2
+
+$ kubectl get rs

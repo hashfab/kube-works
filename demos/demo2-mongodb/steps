@@ -1,0 +1,29 @@
+create pod
+$ kubectl create -f mongodb-pod-gcepd.yaml
+
+create persistent disk
+$ kubectl describe pod mongodb
+$ gcloud compute instances list gke-kubia-default-pool-b4e4eaa9-7k16
+$ gcloud compute disks create --size=1GiB --zone asia-south1-b mongodb
+
+
+
+login to container
+$ kubectl exec -it mongodb mongo
+
+> use mystore
+> db.foo.insert({name:'foo'})
+
+> db.foo.find()
+
+$ kubectl delete pod mongodb
+$ kubectl create -f mongodb-pod-gcepd.yaml
+
+$ kubectl exec -it mongodb mongo
+> use mystore
+> db.foo.find()
+
+cleanup
+kubectl delete all --all
+gcloud compute disks delete --zone asia-south1-b mongodb
+gcloud container clusters delete kubia --region asia-south1

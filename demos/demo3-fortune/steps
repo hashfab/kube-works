@@ -1,0 +1,15 @@
+$ docker build -t dgunjetti/fortune .
+$ docker push dgunjetti/fortune
+
+$ gcloud container clusters create kubia --num-nodes 1 --machine-type f1-micro --zone asia-south1
+
+$ kubectl create -f fortune-pod.yaml
+
+$ kubectl port-forward fortune 8080:80 &
+
+$ curl http://localhost:8080
+
+
+cleanup
+$ kubectl delete all --all
+$ gcloud container clusters delete kubia --region asia-south1
