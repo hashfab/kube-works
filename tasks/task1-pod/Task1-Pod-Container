@@ -1,0 +1,550 @@
+Assign Memory Resources to Containers and Pods
+==============================================
+
+enable metrics-server
+minikube addons enable metrics-server
+
+kubectl get apiservices | grep metrics
+v1beta1.metrics.k8s.io
+
+kubectl create namespace mem-example
+
+specify the memory request and limits
+- resources:requests
+- resources:limits
+
+memory-request-limits.yaml
+--
+apiVersion: v1
+kind: Pod 
+metadata:
+  name: memory-demo
+  namespace: mem-example 
+spec:
+  containers:
+  - name: memory-demo
+    image: polinux/stress
+  resources:
+    limits:
+      memory: "200Mi"
+    requests:
+      memory: "100Mi"
+  command: ["stress"]
+  args: ["--vm", "1", "--vm-bytes", "150M", "--vm-hang", "1"]
+--
+
+kubectl create -f memory-request-limits.yaml
+
+kubectl get pod memory-demo --output=yaml --namespace=mem-example
+
+kubectl top pod memory-demo -n mem-example
+
+--
+exceed memory limits
+args: ["--vm-bytes", "250Mi"]
+
+kubectl get pod memory-demo -n mem-example
+- OOM Killed
+
+kubectl get pod memory-demo --output=yaml --namespace=mem-example
+lastState: terminated: reason: OOM Killed
+
+kubectl describe pod memory-demo -n mem-example
+- container starts and fails repeatedly.
+      
+--
+Specify memory limits and request too big for node
+resources:limits resources:requests memory: "1000Gi"
+
+kubectl get pod memory-demo -n mem-example
+Status: Pending - pod is not scheduled to run on any node.  
+
+kubectl describe pod memory-demo -n mem-example
+Reason: FailedSchedulings Insufficient memory
+--
+
+If you do not specify a memory limit: 
+ - container will use all nodes memory
+ - if namespace has memory-limit, container automatically gets it.
+
+--
+
+By keeping Pod's memory request low - good chance of being scheduled.
+memory limit greater than memory request
+ - can have memory bursts limited to reasonable amount
+
+---------------------------------------------------------------------
+Assigning CPU resources to containers and Pods.
+===============================================
+resources:limits resources:requests cpu:
+
+cpu-request-limit.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cpu-demo
+  namespace: cpu-example
+spec:
+  containers:
+  - name: cpu-demo-ctr 
+    image: vish/stress
+    resources:
+      limits:
+        cpu: "1"
+      requests:
+        cpu: "0.5"
+    args:
+      - -cpus
+      - "2"
+
+----
+kubectl top pod cpu-demo -n cpu-example
+---
+
+Specifing CPU request too big for nodes
+Status: Pending
+Reason: no nodes are available that match.. Insufficient CPU
+----
+
+
+Configure Quality of Service for Pods
+=====================================
+When a Pod is created it is assigned one of the QOS classes
+- Guaranteed
+- Burstable
+- BestEffort
+
+when cpu, memory limits match request of all containers - Guaranteed QoS class is given to Pod
+when one of containers containers limit > request - Burstable
+containers does not have any memory or cpu limits or requests - BestEffort.
+
+Pod that has two containers. 
+one container specifies a memory request of 200MiB
+other container does not specify any requsts or limits
+ - Pod has Burstable QoS
+----------------------------------------------------------------------------------------------
+Assigning extended resources to container
+=========================================
+resources:requests
+resource names - example.com/foo  - org domain/resource name
+
+extended-resource-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: extended-resource
+spec:
+  containers:
+  - name: extended-resource-ctr
+    image: nginx
+    resources:
+      requests: 
+        example.com/dongle:3
+      limits:
+        example.com/dongle:3
+---------------------------------------------------------------------------------------------
+configure Pod to use a volume for storage
+=========================================
+redis.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: redis
+spec:
+  containers:
+  - name: redis-ctr
+    image: redis
+    volumeMounts:
+    - name: redis-storage
+      mountPath: /data/redis
+  volumes:
+  - name: redis-storage
+    emptyDir: {}
+---
+kubectl create -f redis.yaml
+kubectl get pod redis --watch
+kubectl exec -it redis -- /bin/bash
+--
+install ps 
+apt-get update
+apt-get install procps
+---------------------------------------------------------------------------------------------
+configure Pod to use Persistent volume for storage
+==================================================
+persistent volume is backed by storage
+persistent volume claim is automatically bound to persistent volume
+Pod specifies pvc as storage
+
+minikube ssh 
+sudo su
+mkdir /mnt/data 
+echo 'hello' > /mnt/data/index.html
+
+create hostPath persistent volume
+
+apiVersion: v1
+kind: PersistentVolume
+metadata: 
+  name: pv-volume
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi 
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---
+kubectl create -f pv.yaml
+kubectl get pv pv-volume 
+---
+kind: PersistentVolumeClaim
+apiVersion: v1 
+metadata:
+  name: pv-claim
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce 
+  resources:
+    requests:
+      storage: 3Gi
+---
+kubectl create -f pv-claim.yaml
+kubectl get pvc pv-claim 
+kubectl get pv pv-volume 
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pv-pod 
+spec:
+  volumes:
+  - name: pv-storage
+    persistentVolumeClaim:
+      claimName: pv-claim
+  containers:
+  - name: pv-ctr
+    image: nginx
+    ports:
+    - containerPort: 80
+      name: "http-server"
+    volumeMounts:
+    - mountPath: "/usr/share/nginx/html"
+      name: pv-storage
+--- 
+kubectl create -f pv-pod.yaml
+kubectl get pod pv-pod
+kubectl exec -it pv-pod -- /bin/bash
+apt-get update
+apt-get install curl
+curl localhost
+---
+storage configured with a GID, group id, allows writing only by Pods using same GID.
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pv1 
+  annotations:
+    pv.beta.kubernetes.io/gid: "1234"
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi 
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---
+
+---------------------------------------------------------------------------------------------
+configure Pod to use a projected volume for storage
+====================================================
+mount several volumes in a shared directory
+---
+echo -n "admin" > ./username.txt
+echo -n "1f2d1e2e67df" > ./password.txt
+
+kubectl create secret generic user --from-file=./username.txt
+kubectl create secret generic pass --from-file=./password.txt
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: projected-volume-pod 
+spec:
+  containers:
+  - name: projected-volume-ctr
+    image: busybox
+    args:
+    - sleep
+    - "86400"
+    volumeMounts:
+    - name: all-in-one
+      mountPath: "/projected-volume"
+      readOnly: true
+  volumes:
+  - name: all-in-one
+    projected:
+      sources:
+      - secret:
+          name: user
+      - secret:
+          name: pass
+---
+kubectl create -f projected-volume-pod.yaml
+kubectl get pod projected-volume-pod --watch
+kubectl exec -it projected-volume-pod -- /bin/sh 
+ls /projected-volume
+---------------------------------------------------------------------------------------------
+configuring security context for a Pod or Container 
+===================================================
+- permission to access an object - file, using userid and groupid.
+- Security Enhanced Linux (SELinux) - objects are assigned security labels.
+- running as privileged or unprivileged.
+- linux capabilities
+- AppArmor - program profiles to restrict capabilities of program.
+- Seccomp - filters process system calls.
+- AllowPrivilegesEscalation - process gaining more prviliges than its parent process.
+
+set security context for a Pod 
+- The security context for a Pod applies to the Pod’s Containers and also to the 
+  Pod’s Volumes when applicable.
+
+kind: Pod
+apiVersion: v1
+metadata:
+  name: security-context-demo
+spec:
+  securityContext:
+    runAsUser: 1000
+    fsGroup: 2000
+  volumes:
+    - name: sec-ctx-vol 
+      emptyDir: {}
+  containers:
+    - name: sec-ctx-ctr 
+      image: gcr.io/google-samples/node-hello:1.0
+      volumeMounts:
+        - name: sec-ctx-vol 
+          mountPath: /data/demo
+      securityContext:
+        allowPrivilegeEscalation: false
+---
+kubectl create -f security-context-demo.yaml
+kubectl get pod security-context-demo
+kubectl exec -it security-context-demo -- sh
+$ ps aux
+USER 1000
+$ ls -l /data 
+2000
+---
+
+Set security context for a container:
+containers.securityContext: runAsUser: 3000
+---
+Set capabilities for a container:
+containers.securityContext.capabilities:
+  add: ["NET_ADMIN", "SYS_TIME"]
+
+cd /proc/1
+cat Status
+---
+
+Assign SELinux labels to a container:
+containers.securityContext.seLinuxOptions:
+  level: "s0:c123,c456"
+-----------------------------------------------------------------------------------------------
+configure service account for Pods
+==================================
+A service account provides identity for processes that run in a Pod.
+
+kubectl - authenticated by api server as a particular user account.
+Processes in containers inside Pods can also contact apiserver. they are authenticated as a 
+particular service account.
+
+Use default service account to access api server:
+
+kubectl get pod podname -o yaml
+spec.serviceAccountName will set to default.
+
+serviceAccount credentials are automatically mounted which are used to access api server.
+
+Every namespace has a default service account resource called default. 
+kubectl get serviceAccounts
+
+kubectl create -f - << EOF 
+kind: ServiceAccount 
+apiVersion: v1
+metadata:
+  name: build-robot
+EOF
+---
+manually create a service account api token
+
+kubectl create -f - << EOF
+kind: Secret
+apiVersion: v1 
+metadata:
+  name: build-robot-secret
+  annotations:
+    kubernetes.io/service-account.name: build-robot
+type: kubernetes.io/service-account-token
+EOF
+---
+kubectl describe secret/build-robot-secret
+token: eyJhbGciOiJSUzI1NiIsImtpZCI6IiJ9.e
+---
+
+Adding imagePullSecrets to service account:
+kubectl create secret docker-registry myregistrykey \
+--docker-server=DOCKER_REGISTRY_SERVER --docker-username=DOCKER_USER \
+--docker-password=DOCKER_PASSWORD --docker-email=DOCKER_EMAIL
+
+kubectl get secrets myregistrykey
+
+kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "myregistrykey"}]}'
+
+kubectl get serviceaccounts default -o yaml > ./sa.yaml
+vi sa.yaml
+[editor session not shown]
+[delete line with key "resourceVersion"]
+[add lines with "imagePullSecrets:"]
+
+---
+
+Service Account Token Volume Projection
+  volumes:
+  - name: vault-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          path: vault-token
+          expirationSeconds: 7200
+          audience: vault
+The kubelet will request and store the token on behalf of the pod, make the token available 
+to the pod at a configurable file path, and refresh the token as it approaches expiration.
+Kubelet proactively rotates the token if it is older than 80% of its total TTL, or if the 
+token is older than 24 hours.
+
+---
+-----------------------------------------------------------------------------------------------
+Pulling image from private registry.
+====================================
+
+docker login
+the login process updates config.json with authorization token
+cat ~/.docker/config.json
+
+create a secret in the cluster that holds your authorization token 
+- secret of docker-registry type
+- create secret named regcred
+
+kubectl create secret docker-registry regcred --docker-server=<> \
+--docker-username=<> --docker-password=<> --docker-email=<>
+
+kubectl get secret regcred -o yaml
+.dockerconfigjson is base64 representation of docker credentials
+
+-- 
+kind: Pod
+apiVersion: v1
+metadata:
+  name: private-reg
+spec:
+  containers:
+  - name: private-reg-ctr
+    image: <>
+  imagePullSecrets:
+  - name: regcred 
+---
+kubectl create -f private-reg.yaml
+-----------------------------------------------------------------------------------------------
+configure liveness and readiness probes
+=======================================
+liveness - when to restart container
+readiness - when to add pod to service.
+
+kind: Pod
+apiVersion: v1
+metadata:
+  name: liveness-demo
+  labels:
+    test: liveness
+spec:
+  containers:
+  - name: liveness-ctr
+    image: k8s.gcr.io/busybox
+    args:
+    - /bin/sh
+    - -c 
+    - touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 600
+    livenessProbe:
+      exec:
+        command:
+        - cat
+        - /tmp/healthy
+      initialDelaySeconds: 5
+      periodSeconds: 5
+---
+kubectl create -f liveness-demo.yaml
+kubectl describe pod liveness-demo
+Unhealthy liveness probe failed.
+kubectl get pod liveness-demo
+RESTARTS *
+---
+Define liveness http get:
+args:
+- server
+livenessProbe:
+  httpGet:
+    path: /healthyz
+    port: 8080
+    httpHeaders:
+    - name: X-Custom-httpHeader
+      value: Awesome
+----
+Define TCP liveness probe
+livenessProbe:
+  tcpSocket:
+      port:8080
+---
+readiness - syntax same as liveness
+---
+timeoutSeconds - probe timeout
+successThreshold - default 1
+failureThresold - default 3
+-----------------------------------------------------------------------------------------------
+Assign Pods to nodes
+====================
+Add a label to a node
+kubectl get nodes
+kubectl label nodes <name> disktype=ssd
+kubectl get nodes --show-labels
+--
+spec.nodeSelector:
+  disktype: ssd
+--
+kubectl get pod -o wide
+-----------------------------------------------------------------------------------------------
+configure pod initialization
+============================
+Init container to initialize a Pod before application container runs.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
