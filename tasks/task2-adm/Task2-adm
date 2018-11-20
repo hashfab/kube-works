@@ -1,0 +1,325 @@
+access clusters using kubernetes api
+====================================
+
+- know the location of cluster and credentials.
+- check the location and credentials that kubectl knows about
+  - kubectl config view
+------
+
+- kubectl handles the locating and authenticating to the API server.
+  - run kubctl in proxy mode.
+  - use Go or Python client library.
+------
+
+kubectl uses root certificate (self-signed) and client certificate to access the server.
+------
+
+$ kubectl proxy --port=8080 &
+$ curl http://localhost:8080/api/
+------
+
+without proxy - pass authentication token directly to api server.
+------
+
+Programmatic access to the API
+Go client. - write applications on top Go client. it uses same config files as kubectl cli 
+to locate and authenticate with api server.
+------
+
+Accessing api from Pod
+- use official client libraries.
+- without client library - use kube proxy. to expose the localhost interface of the pod.
+- kubernetes api server is accessible via service 'kubernetes' in default ns.
+- kubernetes.default.svc to query api server.
+- authenticate with api server with service account credentials.
+- /var/run/secrets/kubernetes.io/serviceaccount/token
+- /var/run/secrets/kubernetes.io/serviceaccount/ca.crt - used to verify the cert from api server.
+-------------------------------------------------------------------------------------------------
+
+Access services running in cluster
+==================================
+- nodes, pods, services have IP.
+
+Access services with public IP
+- NodePort or LoadBalancer.
+
+- Place pods behind services. To access one specific pod from a set of replicas, 
+such as for debugging, place a unique label on the pod and create a new service 
+which selects this label.
+
+- Access services, nodes, or pods using the Proxy Verb.
+Does apiserver authentication and authorization prior to accessing the remote service. 
+Use this if the services are not secure enough to expose to the internet, 
+or to gain access to ports on the node IP, or for debugging.
+
+- Access from a node or pod in the cluster.
+Run a pod, and then connect to a shell in it using kubectl exec. 
+Connect to other nodes, pods, and services from that shell.
+
+Discovering builtin services
+- kubectl cluster-info
+- you use the kubectl cluster-info command to retrieve the service’s proxy URL.
+
+Manually constructing apiserver proxy URLs
+- http://kubernetes_master_address/api/v1/namespaces/namespace_name/services/
+- http://104.197.5.247/api/v1/namespaces/kube-system/services/elasticsearch-logging/proxy/_search?q=user:kimchy
+
+-------------------------------------------------------------------------------------------------
+
+Advertise extended resources for a Node
+=======================================
+- http patch request to api server.
+- kubectl get nodes
+- kubectl proxy &
+curl --header "Content-Type: application/json-patch+json" \
+--request PATCH \
+--data '[{"op": "add", "path": "/status/capacity/example.com~1dongle", "value": "4"}]' \
+http://localhost:8001/api/v1/nodes/minikube/status
+
+status: "example.com/dongle": "4",
+
+- kubectl describe node minikube
+-----
+Storage example
+example.com/special-storage: 8
+----
+cleanup
+PATCH /api/v1/nodes/<your-node-name>/status HTTP/1.1
+Accept: application/json
+Content-Type: application/json-patch+json
+Host: k8s-master:8080
+
+[
+  {
+    "op": "remove",
+    "path": "/status/capacity/example.com~1dongle",
+  }
+]
+-------------------------------------------------------------------------------------------------
+
+Autoscale the DNS service in a cluster
+======================================
+kubectl get deployment -n kube-system
+- coredns - using deployment
+- kubedns - using rc 
+
+Enabling DNS horizontal autoscaling:
+The Pods in the Deployment run a container based on the cluster-proportional-autoscaler-amd64 image.
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: dns-autoscalar
+  namespace: kube-system
+  labels:
+    k8s-app: dns-autoscalar
+spec:
+  selector:
+    matchLabels:
+      k8s-app: dns-autoscalar
+  template:
+    metadata:
+      labels:
+        k8s-app: dns-autoscalar 
+    spec:
+      containers:
+      - name: autoscalar
+        image: k8s.gcr.io/cluster-proportional-autoscaler-amd64:1.1.1
+        resources:
+          requests:
+            cpu: "20m"
+            memory: "10Mi"
+        command:
+          - /cluster-proportional-autoscaler
+          - --namespace=kube-system
+          - --configmap=dns-autoscaler
+          - --target=1
+          - --default-params={"linear":{"coresPerReplica":256,"nodesPerReplica":16,"min":1}}
+          - --logtostderr=true
+          - --v=2
+---------------------
+not working....
+-------------------------------------------------------------------------------------------------
+
+change the reclaim policy of a persistent volume
+================================================
+
+- Retain
+- Recycle
+- Delete - default - Pv is deleted when pvc is deleted.
+
+change to Retain
+kubectl patch pv <name> -p '{"spec" : {"persistentVolumeReclaimPolicy": "Retain"} }'
+
+kubectl get pv
+
+-------------------------------------------------------------------------------------------------
+
+change the default storage class
+================================
+- default storage class is used to dynamically provision storage for pvc that do not require
+any specific storage class.
+
+kubectl get storageclass
+standard (default)   k8s.io/minikube-hostpath   27d
+
+Mark the default StorageClass as non-default
+kubectl patch storageclass standard -p \
+'{"metadata": {"annotations" : {"storageclass.kubernetes.io/is-default-class": "false"} } }'
+
+-------------------------------------------------------------------------------------------------
+
+Cluster Management
+==================
+
+Resizing a cluster
+gcloud compute instance-groups managed resize kubernetes-minion-group --size=42 --zone=$ZONE
+
+Cluster autoscaling
+KUBE_ENABLE_CLUSTER_AUTOSCALER=true \
+KUBE_AUTOSCALER_MIN_NODES=3  \
+KUBE_AUTOSCALER_MAX_NODES=10  \
+NUM_NODES=5  \
+./cluster/kube-up.sh
+
+gcloud container clusters create mytestcluster --zone=us-central1-b --enable-autoscaling --min-nodes=3 --max-nodes=10 --num-nodes=5
+gcloud container clusters update mytestcluster --enable-autoscaling --min-nodes=1 --max-nodes=15
+
+
+Maintenance on a Node
+kubectl drain $NODENAME - stop schedule, gracefull shutdown
+
+Maintenance
+
+kubectl uncordon $NODENAME - start schedule again.
+
+-------------------------------------------------------------------------------------------------
+
+configure multiple schedulers
+=============================
+git clone https://github.com/kubernetes/kubernetes.git
+cd kubernetes
+make
+
+FROM busybox
+ADD ./_output/dockerized/bin/linux/amd64/kube-scheduler /usr/local/bin/kube-scheduler
+
+docker build -t gcr.io/my-gcp-project/my-kube-scheduler:1.0 .
+gcloud docker -- push gcr.io/my-gcp-project/my-kube-scheduler:1.0
+
+
+kind: Service
+apiVersion: v1 
+metadata:
+  name: my-scheduler
+  namespace: kube-system
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1 
+metadata: 
+  name: my-scheduler-as-kube-scheduler
+subjects:
+- kind: ServiceAccount
+  name: my-scheduler
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: kube-scheduler
+  apiGroup: rbac.authoriation.k8s.io
+---
+kind: Deployment
+apiVersion: v1
+metadata:
+  labels:
+    component: scheduler
+    tier: control-plane
+  name: my-scheduler
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      component: scheduler
+      tier: control-plane
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: scheduler
+        tier: control-plane
+        version: second
+    spec:
+      serviceAccountName: my-scheduler
+      containers:
+      - name: kube-second-scheduler
+        image: gcr.io/my-gcp-project/my-kube-scheduler:1.0
+        command:
+        - /usr/local/bin/kube-scheduler
+        - --address=0.0.0.0
+        - --leader-elect=false
+        - --scheduler-name=my-scheduler
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 1051
+          initialDelaySeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 1051
+        resources:
+          requests:
+            cpu: '0.1'
+        securityContext:
+          privileged: false
+        volumeMounts: []
+      hostNetwork: false
+      hostPID: false
+      volumes: []
+---
+- name of the scheduler specified as an argument to the scheduler command in the 
+container spec should be unique. 
+
+- This is the name that is matched against the value of the optional 
+spec.schedulerName on pods, to determine whether this scheduler is responsible 
+for scheduling a particular pod.
+
+- created a dedicated service account my-scheduler and bind the 
+cluster role system:kube-scheduler
+to it so that it can acquire the same privileges as kube-scheduler.
+
+kubectl create -f my-scheduler.yaml
+kubectl get pods -n kube-system
+
+
+To run multiple-scheduler with leader election enabled, you must do the following:
+--leader-elect=true
+--lock-object-namespace=lock-object-namespace
+--lock-object-name=lock-object-name
+
+If RBAC is enabled on your cluster, you must update the system:kube-scheduler cluster role. 
+Add you scheduler name to the resourceNames of the rule applied for endpoints resources
+
+kubectl edit clusterrole system:kube-scheduler
+------------
+
+Specify schedulers for pods
+metadata:
+  name: annotation-second-scheduler
+spec:
+  schedulerName: my-scheduler
+-----------
+-------------------------------------------------------------------------------------------------
+
+configure out of resource handling with kubelet
+===============================================
+
+
+
+
+
+
+
+
+

@@ -534,11 +534,162 @@ configure pod initialization
 ============================
 Init container to initialize a Pod before application container runs.
 
+create a Pod with one application container and one Init container. 
+Init container runs to completion before application container starts.
 
+spec.initContainers:
+- name:
+  image:
+-----------------------------------------------------------------------------------------------
+Attach handlers to container lifecycle events
+=============================================
+postStart, preStop
 
+spec:
+  containers:
+  - name:
+    image:
+    lifecycle:
+      postStart:
+        exec:
+          command: ["/bin/sh", "-c" "echo hello > /usr/share/messages"]
+      preStop:
+        exec:
+          command: ["/usr/sbin/nginx", "-s", "quit"]
+----
+Kubernetes sends the postStart event immediately after the Container is created. 
+There is no guarantee, however, that the postStart handler is called before the 
+Container’s entrypoint is called.
 
+Kubernetes’ management of the container blocks until the postStart handler completes. 
+The Container’s status is not set to RUNNING until the postStart handler completes.
 
+Kubernetes’ management of the Container blocks until the preStop handler completes, 
+it is not terminated, unless the Pod’s grace period expires.
 
+-----------------------------------------------------------------------------------------------
+configure a Pod to use configmap
+================================
+decouple configuration artifacts from image content to keep containerized applications portable.
+--
+kubectl create configmap <key> <value>
+key - filename
+value - file contents
+--
+mkdir -p config
+wget https://k8s.io/docs/tasks/configure-pod-container/configmap/kubectl/game.properties \
+-O config/game.properties
+wget https://k8s.io/docs/tasks/configure-pod-container/configmap/kubectl/ui.properties \
+-O config/ui.properties
+
+kubectl create configmap game-config --from-file=config/
+kubectl describe configmap game-config 
+---
+Use the option --from-env-file to create a ConfigMap from an env-file, 
+---
+Define the key to use when creating a ConfigMap from a file
+--from-file=<my-key-name>=<path-to-file>
+---
+Create ConfigMaps from literal values
+kubectl create configmap special-config \
+ --from-literal=special.how=very --from-literal=special.type=charm
+---
+Define container environment variables using ConfigMap data
+spec.containers:
+  env:
+    - name: SPECIAL_LEVEL_KEY
+      valueFrom: 
+      configMapKeyRef:
+        name: special-config
+        key: special.how
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: env-config
+  namespace: default
+data:
+  log_level: INFO
+---
+spec.containers.env
+- name: LOG_LEVEL
+  valueFrom:
+    configMapKeyRef:
+    name: env-config
+    key: log_level
+---
+Configure all key-value pairs in a ConfigMap as container environment variables
+data:
+  SPECIAL_LEVEL: very
+  SPECIAL_TYPE: charm
+--
+spec.containers:
+  envFrom:
+  - configMapRef:
+      name: special-config
+---
+Add ConfigMap data to a Volume
+
+spec.containers:
+  volumeMounts:
+    - name: config-volume
+      mountPath: /etc/config
+volumes:
+  - name: config-volume
+    configMap:
+      name: special-config
+---
+
+Add ConfigMap data to a specific path in the Volume
+volumes:
+  configMap:
+    name:
+    items:
+    - key: special.level
+      path: keys
+----
+cat /etc/config/keys - very 
+---
+
+Mounted ConfigMaps are updated automatically
+Kubelet is checking whether the mounted ConfigMap is fresh on every periodic sync.
+However, it is using its local ttl-based cache for getting the current value of the ConfigMap.
+ As a result, the total delay from the moment when the ConfigMap is updated to the moment
+  when new keys are projected to the pod can be as long as 
+  kubelet sync period + ttl of ConfigMaps cache in kubelet.
+
+ConfigMaps reside in a specific namespace.
+ A ConfigMap can only be referenced by pods residing in the same namespace.
+-----------------------------------------------------------------------------------------------
+share process namespace between containers of a Pod
+===================================================
+Processes in a container are visible to other containers in that Pod.
+
+kind: Pod
+apiVersion: v1
+metadata:
+  name: share-process-namespace
+spec:
+  shareProcessNamespace: true
+  containers:
+    - name: nginx
+      image: nginx
+    - name: shell
+      image: busybox
+      securityContext:
+        capabilities:
+          add:
+            - SYS_PTRACE
+      stdin: true
+      tty: true
+
+----
+kubectl create -f share-process-namespace.yaml
+kubectl attach -it share-process-namespace -c shell
+ps ax
+-----------------------------------------------------------------------------------------------
+Kompose is conversion tool for docker compose to kubernetes manifests.
+-----------------------------------------------------------------------------------------------
 
 
 
