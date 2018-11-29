@@ -1,3 +1,13 @@
+diagram:
+https://medium.com/@it.juan.255/kubernetes-the-hard-way-explained-23e917c96c10
+
+-------------------------------------------------------------------------------------------------
+internal subnet : 10.240.0.0/24
+worker nodes: 10.240.0.20, 21, 22
+controller: 10.240.0.10, 11, 12
+pod cidr: 10.200.0.0, 1.0, 2.0
+-------------------------------------------------------------------------------------------------
+
 gcloud init
 or
 gcloud config set compute/region us-west1

@@ -1,0 +1,91 @@
+https://docs.google.com/document/d/1N4fusJG9drQx7J3HIfNsy59dVJh9kwVQ6OtDDVLc36Q/edit
+
+alias kg='kubectl get'
+alias kc='kubectl create -f'
+alias kr='kubectl run'
+alias kl='kubectl logs'
+alias k='kubectl'
+alias ke='kubectl explain'
+---------------------------------------------------------------------------------------------------
+source <(kubectl completion bash)                         # add to .bashrc
+
+kr nginx --image=nginx -o yaml --dry-run                  # will create a deployment
+kr nginx --image=nginx --restart=Never -o yaml --dry-run  # will create a pod
+k expose deployment nginx-deployment -o yaml --dryrun     # will create a service
+---------------------------------------------------------------------------------------------------
+
+creat a job that run 60 times with 2 jobs running in parallel
+
+https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/
+https://cloud.google.com/kubernetes-engine/docs/how-to/jobs
+
+
+kr pi --image=perl --restart=Never --dry-run -o yaml > job.yaml
+ke jobs template
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  template:
+    spec:
+      containers:
+      - image: perl
+        name: pi
+        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+      restartPolicy: Never
+  backoffLimit: 4
+  completions: 60
+  parallelism: 2
+
+kc job.yaml
+kg jobs --watch
+
+kubectl delete jobs/pi
+kubectl delete -f ./job.yaml
+---------------------------------------------------------------------------------------------------
+Find which pod is taking max CPU
+
+kr nginx --image=nginx --restart=Never
+k top pods
+---------------------------------------------------------------------------------------------------
+List all PV sorted by name
+kg pv --sort-by=
+---------------------------------------------------------------------------------------------------
+Create a NetworkPolicy to allow connect to port 8080 by busybox pod only
+
+---------------------------------------------------------------------------------------------------
+fixing broken nodes
+https://kubernetes.io/docs/concepts/architecture/nodes/
+---------------------------------------------------------------------------------------------------
+etcd backup
+https://kubernetes.io/docs/getting-started-guides/ubuntu/backups/
+https://www.mirantis.com/blog/everything-you-ever-wanted-to-know-about-using-etcd-with-kubernetes-v1-6-but-were-afraid-to-ask/
+---------------------------------------------------------------------------------------------------
+TLS bootstrapping
+https://coreos.com/kubernetes/docs/latest/openssl.html
+https://kubernetes.io/docs/admin/kubelet-tls-bootstrapping/
+https://github.com/cloudflare/cfssl
+---------------------------------------------------------------------------------------------------
+You have a Container with a volume mount. Add a init container that creates an empty file in 
+the volume. (only trick is to mount the volume to init-container as well)
+
+spec:
+  containers:
+    command: ['sh', '-c', 'echo the app is running! && sleep 3600']
+    volumeMounts:
+    - mountPath: /cache
+      name: cache-volume
+  initContainers:
+  - name: init-touch-file
+    image: busybox
+    volumeMounts:
+    - mountPath: /data
+      name: cache-volume
+    command: ['sh', '-c', 'echo "" > /data/testfile']
+  volumes:
+  - name: cache-volume
+    emptyDir: {}
+---------------------------------------------------------------------------------------------------
+

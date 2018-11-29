@@ -1,0 +1,57 @@
+configuring security context for a Pod or Container 
+===================================================
+- permission to access an object - file, using userid and groupid.
+- Security Enhanced Linux (SELinux) - objects are assigned security labels.
+- running as privileged or unprivileged.
+- linux capabilities
+- AppArmor - program profiles to restrict capabilities of program.
+- Seccomp - filters process system calls.
+- AllowPrivilegesEscalation - process gaining more prviliges than its parent process.
+
+set security context for a Pod 
+- The security context for a Pod applies to the Pod’s Containers and also to the 
+  Pod’s Volumes when applicable.
+
+kind: Pod
+apiVersion: v1
+metadata:
+  name: security-context-demo
+spec:
+  securityContext:
+    runAsUser: 1000
+    fsGroup: 2000
+  volumes:
+    - name: sec-ctx-vol 
+      emptyDir: {}
+  containers:
+    - name: sec-ctx-ctr 
+      image: gcr.io/google-samples/node-hello:1.0
+      volumeMounts:
+        - name: sec-ctx-vol 
+          mountPath: /data/demo
+      securityContext:
+        allowPrivilegeEscalation: false
+---
+kubectl create -f security-context-demo.yaml
+kubectl get pod security-context-demo
+kubectl exec -it security-context-demo -- sh
+$ ps aux
+USER 1000
+$ ls -l /data 
+2000
+---
+
+Set security context for a container:
+containers.securityContext: runAsUser: 3000
+---
+Set capabilities for a container:
+containers.securityContext.capabilities:
+  add: ["NET_ADMIN", "SYS_TIME"]
+
+cd /proc/1
+cat Status
+---
+
+Assign SELinux labels to a container:
+containers.securityContext.seLinuxOptions:
+  level: "s0:c123,c456"

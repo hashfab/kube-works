@@ -1,0 +1,118 @@
+1.11.0
+core concepts 19%
+- understanding kubernetes primitives
+- cluster architecture
+- services and network primitives
+
+security: 12%
+- auth authz
+- security primitives
+- network policies
+- TLS cert
+- private registry
+- security context
+- secure etcd
+
+Installation, config validation: 12%
+- design cluster
+- install master and worker nodes
+- secure cluster communication
+- HA cluster
+- kube release binaries
+- deploy cluster
+- choose network solution
+- choose kube infra config
+- run/analyse end to end test of cluster/nodes
+
+
+cluster maintenance: 11%
+- cluster upgrade process
+- os upgrade
+- backup and restore 
+
+Networking: 11$
+- config on nodes
+- pod networking
+- service networking
+- load balancer
+- ingress
+- cluster dns 
+- cni 
+
+Troubleshoot: 10%
+- app failure
+- cp failure
+- node failure
+- networking
+
+app lifecyle: 8%
+- rolling update and roll back
+- config app
+- scale app
+- self-heal app
+
+storage: 7%
+- PV 
+- access modes of volumes
+- PVC 
+- storage objects
+- app to persistent storage
+
+scheduling: 5%
+- label selector
+- daemonsets
+- resource requests/limits
+- multiple schedulers
+- manually schedule without schedulers
+- scheduler events
+- config scheduler
+
+logging monitoring: 5%
+- monitor cluster components
+- monitor app
+- cluster comp logs
+- app logs
+
+
+kubectl run nginx --image=nginx
+kubectl get pods ngnix -o yaml > nginxPod.yaml
+
+https://prabhatsharma.in/blog/how-i-passed-certified-kubernetes-administrator-exam-on-first-attempt/
+alias k=kubectl
+k run nginx --image=nginx --restart=Never
+k run nginx --image=nginx --replicas=2
+
+k run nginx --image=nginx --restart=Never --dry-run -o yaml > nginx-pod.yaml
+k run
+
+
+
+https://blenderfox.com/category/kubernetes/page/2/
+
+https://github.com/arush-sal/cka-practice-environment
+
+https://github.com/walidshaari/Kubernetes-Certified-Administrator
+
+
+https://medium.com/talking-tech-all-around/how-to-nail-the-cka-exam-7944be5476a4
+source <(kubectl completion bash)
+
+kubectl run nginx --image=nginx -o yaml --dry-run  # will create a deployment
+kubectl run nginx --image=nginx --restart=Never -o yaml --dry-run # will create a pod
+kubectl expose deployment nginx-deployment -o yaml --dryrun # will create a service
+
+
+https://training.linuxfoundation.org/training/kubernetes-fundamentals/
+
+https://github.com/Praqma/LearnKubernetes/blob/master/kamran/Kubernetes-The-Hard-Way-on-AWS.md
+
+https://medium.com/@it.juan.255/kubernetes-the-hard-way-explained-23e917c96c10
+
+systemctl status <service name> - to get location of service file.
+
+-----imp... 
+http://kubernetesbyexample.com
+https://docs.google.com/document/d/1N4fusJG9drQx7J3HIfNsy59dVJh9kwVQ6OtDDVLc36Q/edit
+https://cka-exam.blog/
+https://www.katacoda.com/courses/kubernetes
+
